@@ -154,7 +154,7 @@ class SAP(nn.Module):
         return angle
 
 @BACKBONES.register_module()
-class ResNet3dSlowOnly_SAP(nn.Module):
+class ResNet3dSlowOnly_SAP(ResNet3d):
 
     def __init__(self, **kwargs):
         super().__init__()

@@ -23,6 +23,7 @@ dataset_type = 'PoseDataset'
 ann_file = 'data/nturgbd/ntu120_hrnet.pkl'
 left_kp = [1, 3, 5, 7, 9, 11, 13, 15]
 right_kp = [2, 4, 6, 8, 10, 12, 14, 16]
+class_prob = [1] * 60 + [2] * 60
 train_pipeline = [
     dict(type='UniformSampleFrames', clip_len=48),
     dict(type='PoseDecode'),
@@ -33,8 +34,8 @@ train_pipeline = [
     dict(type='Flip', flip_ratio=0.5, left_kp=left_kp, right_kp=right_kp),
     dict(type='GeneratePoseTarget', with_kp=False, with_limb=True),
     dict(type='FormatShape', input_format='NCTHW_Heatmap'),
-    dict(type='Collect', keys=['imgs', 'label', 'keypoint'], meta_keys=[]),
-    dict(type='ToTensor', keys=['imgs', 'label', 'keypoint'])
+    dict(type='Collect', keys=['imgs', 'keypoint', 'label'], meta_keys=[]),
+    dict(type='ToTensor', keys=['imgs', 'keypoint', 'label'])
 ]
 val_pipeline = [
     dict(type='UniformSampleFrames', clip_len=48, num_clips=1),
@@ -43,7 +44,7 @@ val_pipeline = [
     dict(type='Resize', scale=(64, 64), keep_ratio=False),
     dict(type='GeneratePoseTarget', with_kp=False, with_limb=True),
     dict(type='FormatShape', input_format='NCTHW_Heatmap'),
-    dict(type='Collect', keys=['imgs', 'label', 'keypoint'], meta_keys=[]),
+    dict(type='Collect', keys=['imgs', 'keypoint', 'label'], meta_keys=[]),
     dict(type='ToTensor', keys=['imgs', 'keypoint'])
 ]
 test_pipeline = [
@@ -53,7 +54,7 @@ test_pipeline = [
     dict(type='Resize', scale=(64, 64), keep_ratio=False),
     dict(type='GeneratePoseTarget', with_kp=False, with_limb=True, double=True, left_kp=left_kp, right_kp=right_kp),
     dict(type='FormatShape', input_format='NCTHW_Heatmap'),
-    dict(type='Collect', keys=['imgs', 'label', 'keypoint'], meta_keys=[]),
+    dict(type='Collect', keys=['imgs', 'keypoint', 'label'], meta_keys=[]),
     dict(type='ToTensor', keys=['imgs', 'keypoint'])
 ]
 data = dict(
@@ -62,9 +63,15 @@ data = dict(
     test_dataloader=dict(videos_per_gpu=1),
     train=dict(
         type='RepeatDataset',
-        dataset=dict(type=dataset_type, ann_file=ann_file, split='xsub_train', pipeline=train_pipeline)),
-    val=dict(type=dataset_type, ann_file=ann_file, split='xsub_val', pipeline=val_pipeline),
-    test=dict(type=dataset_type, ann_file=ann_file, split='xsub_val', pipeline=test_pipeline))
+        times=10,
+        dataset=dict(
+            type=dataset_type,
+            ann_file=ann_file,
+            split='xsub_train_2p',
+            pipeline=train_pipeline,
+            class_prob=class_prob)),
+    val=dict(type=dataset_type, ann_file=ann_file, split='xsub_val_2p', pipeline=val_pipeline),
+    test=dict(type=dataset_type, ann_file=ann_file, split='xsub_val_2p', pipeline=test_pipeline))
 # optimizer
 optimizer = dict(type='SGD', lr=0.05, momentum=0.9, weight_decay=0.0003)  # this lr is used for 8 gpus
 optimizer_config = dict(grad_clip=dict(max_norm=40, norm_type=2))
@@ -75,4 +82,4 @@ checkpoint_config = dict(interval=1)
 evaluation = dict(interval=1, metrics=['top_k_accuracy', 'mean_class_accuracy'], topk=(1, 5))
 log_config = dict(interval=20, hooks=[dict(type='TextLoggerHook'), dict(type='TensorboardLoggerHook')])
 log_level = 'INFO'
-work_dir = './work_dirs/posec3d/slowonly_r50_ntu120_xset/joint'
+work_dir = './work_dirs/posec3d/slowonly_r50_ntu120_xsub/joint'
