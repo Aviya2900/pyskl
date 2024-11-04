@@ -4,12 +4,11 @@ from .resnet3d import ResNet3d
 
 import torch
 import torch.nn as nn
-
-
 import torch.nn.functional as F
+
 class NonLocalBlockND(nn.Module):
     def __init__(self, in_channels, inter_channels=None, dimension=3, sub_sample=True, bn_layer=True,\
-                 num_frame=48,soft_scale=20):
+                 num_frame=300,soft_scale=20):
         """
         :param in_channels:
         :param inter_channels:
@@ -118,15 +117,14 @@ class NonLocalBlockND(nn.Module):
 
         return res,dis,center_xyz
 
-
 class SAP(nn.Module):
-    def __init__(self,soft_scale=20, num_head = 5):
+    def __init__(self,soft_scale=20,num_head = 5):
         super().__init__()
         self.left = nn.ModuleList([NonLocalBlockND(3,8,1,False,soft_scale=soft_scale) for i in range(num_head)])
         self.right = nn.ModuleList([NonLocalBlockND(3,8,1,False,soft_scale=soft_scale) for i in range(num_head)])
         self.head = num_head
 
-    def angle_between(self,a, b):
+    def angle_betwenn(self,a, b):
         dot = torch.einsum("ni,ni->n", a, b)
         norma = torch.clamp(torch.norm(a, p=2, dim=1), min=1e-6)
         normb = torch.clamp(torch.norm(b, p=2, dim=1), min=1e-6)
@@ -141,17 +139,18 @@ class SAP(nn.Module):
         leftxyz = []
         rightxyz = []
         for i in range(self.head):
-            left, temp, tempxyz = self.left[i](x) # res(NxMxTxV, C), dis(4,25), center_xyz(4,25)
+            left, temp, tempxyz = self.left[i](x)
             leftargmax.append(temp)
             leftxyz.append(tempxyz)
             right, temp, tempxyz = self.right[i](x)
             rightargmax.append(temp)
             rightxyz.append(tempxyz)
-            anglelist.append(self.angle_between(left,right).view(-1,1))
+            anglelist.append(self.angle_betwenn(left,right).view(-1,1))
 
-        angle = torch.cat(anglelist,dim=1).view(T,N,2,-1,self.head).permute(1,4,0,3,2).contiguous() # N,C,T,V,M
+        angle = torch.cat(anglelist,dim=1).view(T,N,2,-1,self.head).permute(1,4,0,3,2).contiguous()
 
-        return angle
+        return angle\
+
 
 @BACKBONES.register_module()
 class ResNet3dSlowOnly_SAP(ResNet3d):
@@ -173,27 +172,25 @@ class ResNet3dSlowOnly_SAP(ResNet3d):
         
     def forward(self, imgs, keypoints):
         N, M, T, V, _ = keypoints.shape
-        keys = torch.cat((keypoints, torch.ones(N, M, T, V, 1).to(next(self.parameters()).device)), dim=4)
-        keys = keys.permute(0,2,1,3,4).contiguous().view(N,T,-1) # N, T, M*V*C
+        keys = torch.cat((keypoints, torch.ones(N, M, T, V, 1).to(keypoints.device)), dim=4)
+        keys = keys.permute(0,2,1,3,4).contiguous().view(N,T,-1) # N,T,M*V*C
         keys = self.gen_angle(keys)
-        w_hmaps = self.param1 * self.correlation(imgs, keypoints) + imgs
+        w_hmaps = self.param1 * self.correlation(imgs, keys) + imgs
                 
         return self.resnet3d(w_hmaps)
         
     def correlation(self, x, y):
-        N, _, V, T, _, _ = x.shape
-        x = x.squeeze(1) # N,V,T,H,W
+        N, V, T, _, _ = x.shape # N,V,T,H,W
         _, C, _, _, M = y.shape
         y = y.permute(0,2,4,3,1).contiguous().view(N,T,M*V,C) # N,T,M*V,C
 
-        w = torch.matmul(y, y.permute(0,1,3,2).contiguous()).view(N,T,-1) # N,T,(M*V)*(M*V)
         w = torch.matmul(y, y.permute(0,1,3,2).contiguous()) # N,T,(M*V),(M*V)
         w = self.conv2d(w).unsqueeze(1) # N,1,T,17,17
         w = (self.param2 * self.conv3d(w) + w).squeeze(1) # N,T,17,17
         w = self.linear(w.view(N,T,-1)) # N,T,17
         w = F.softmax(w, dim=-1).permute(0,2,1).contiguous().unsqueeze(-1).unsqueeze(-1) # N,V,T,1,1
 
-        w_hmaps = (x*w).unsqueeze(1) # N,1,V,T,H,W
+        w_hmaps = (x*w) # N,V,T,H,W
 
         return w_hmaps
         

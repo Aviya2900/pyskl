@@ -9,14 +9,34 @@ from .base import BaseRecognizer
 @RECOGNIZERS.register_module()
 class Recognizer3D_SAP(BaseRecognizer):
     """3D recognizer model framework."""
+    
+    def extract_feat(self, imgs, keypoints):
+        """Extract features through a backbone.
 
-    def forward_train(self, sample, label, **kwargs):
+        Args:
+            imgs (torch.Tensor): The input images.
+
+        Returns:
+            torch.tensor: The extracted features.
+        """
+        x = self.backbone(imgs, keypoints)
+        return x
+    
+    def forward(self, imgs, keypoints, label=None, return_loss=True, **kwargs):
+        """Define the computation performed at every call."""
+        if return_loss:
+            if label is None:
+                raise ValueError('Label should not be None.')
+            return self.forward_train(imgs, keypoints, label, **kwargs)
+
+        return self.forward_test(imgs, keypoints, **kwargs)
+
+    def forward_train(self, imgs, keypoints, label, **kwargs):
         """Defines the computation performed at every call when training."""
 
         assert self.with_cls_head
-        imgs = sample[0]
-        keypoints = sample[1]
         
+        print(imgs.shape, keypoints.shape, label.shape)
         imgs = imgs.reshape((-1, ) + imgs.shape[2:])
         losses = dict()
 
@@ -29,7 +49,7 @@ class Recognizer3D_SAP(BaseRecognizer):
 
         return losses
 
-    def forward_test(self, imgs, **kwargs):
+    def forward_test(self, imgs, keypoints, **kwargs):
         """Defines the computation performed at every call when evaluation, testing."""
         batches = imgs.shape[0]
         num_segs = imgs.shape[1]
@@ -44,7 +64,7 @@ class Recognizer3D_SAP(BaseRecognizer):
             feats = []
             while view_ptr < total_views:
                 batch_imgs = imgs[view_ptr:view_ptr + self.max_testing_views]
-                x = self.extract_feat(batch_imgs)
+                x = self.extract_feat(batch_imgs, keypoints)
                 feats.append(x)
                 view_ptr += self.max_testing_views
             # should consider the case that feat is a tuple
@@ -57,7 +77,7 @@ class Recognizer3D_SAP(BaseRecognizer):
             else:
                 feat = torch.cat(feats)
         else:
-            feat = self.extract_feat(imgs)
+            feat = self.extract_feat(imgs, keypoints)
 
         if self.test_cfg.get('feat_ext', False):
             feat_dim = len(feat[0].size()) if isinstance(feat, tuple) else len(feat.size())

@@ -23,7 +23,6 @@ dataset_type = 'PoseDataset'
 ann_file = 'data/nturgbd/ntu120_hrnet.pkl'
 left_kp = [1, 3, 5, 7, 9, 11, 13, 15]
 right_kp = [2, 4, 6, 8, 10, 12, 14, 16]
-class_prob = [1] * 60 + [2] * 60
 train_pipeline = [
     dict(type='UniformSampleFrames', clip_len=48),
     dict(type='PoseDecode'),
@@ -35,7 +34,9 @@ train_pipeline = [
     dict(type='GeneratePoseTarget', with_kp=False, with_limb=True),
     dict(type='FormatShape', input_format='NCTHW_Heatmap'),
     dict(type='Collect', keys=['imgs', 'keypoint', 'label'], meta_keys=[]),
-    dict(type='ToTensor', keys=['imgs', 'keypoint', 'label'])
+    dict(type='ToTensor', keys=['imgs', 'keypoint', 'label']),
+    dict(type='SampleTensor', list=['imgs', 'keypoint']),
+    dict(type='LabelMapper')
 ]
 val_pipeline = [
     dict(type='UniformSampleFrames', clip_len=48, num_clips=1),
@@ -45,7 +46,9 @@ val_pipeline = [
     dict(type='GeneratePoseTarget', with_kp=False, with_limb=True),
     dict(type='FormatShape', input_format='NCTHW_Heatmap'),
     dict(type='Collect', keys=['imgs', 'keypoint', 'label'], meta_keys=[]),
-    dict(type='ToTensor', keys=['imgs', 'keypoint'])
+    dict(type='ToTensor', keys=['imgs', 'keypoint']),
+    dict(type='SampleTensor', list=['imgs', 'keypoint']),
+    dict(type='LabelMapper')
 ]
 test_pipeline = [
     dict(type='UniformSampleFrames', clip_len=48, num_clips=10),
@@ -55,7 +58,9 @@ test_pipeline = [
     dict(type='GeneratePoseTarget', with_kp=False, with_limb=True, double=True, left_kp=left_kp, right_kp=right_kp),
     dict(type='FormatShape', input_format='NCTHW_Heatmap'),
     dict(type='Collect', keys=['imgs', 'keypoint', 'label'], meta_keys=[]),
-    dict(type='ToTensor', keys=['imgs', 'keypoint'])
+    dict(type='ToTensor', keys=['imgs', 'keypoint']),
+    dict(type='SampleTensor', list=['imgs', 'keypoint']),
+    dict(type='LabelMapper')
 ]
 data = dict(
     videos_per_gpu=32,
@@ -68,8 +73,7 @@ data = dict(
             type=dataset_type,
             ann_file=ann_file,
             split='xsub_train_2p',
-            pipeline=train_pipeline,
-            class_prob=class_prob)),
+            pipeline=train_pipeline)),
     val=dict(type=dataset_type, ann_file=ann_file, split='xsub_val_2p', pipeline=val_pipeline),
     test=dict(type=dataset_type, ann_file=ann_file, split='xsub_val_2p', pipeline=test_pipeline))
 # optimizer

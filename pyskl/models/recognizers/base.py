@@ -69,17 +69,17 @@ class BaseRecognizer(nn.Module, metaclass=ABCMeta):
         if self.with_cls_head:
             self.cls_head.init_weights()
 
-    def extract_feat(self, imgs, *args):
+    def extract_feat(self, imgs):
         """Extract features through a backbone.
 
         Args:
             imgs (torch.Tensor): The input images.
-            keypoints (torch.Tensor): The input keypoints (for SAP only)
 
         Returns:
             torch.tensor: The extracted features.
         """
-        return self.backbone(imgs, *args)
+        x = self.backbone(imgs)
+        return x
 
     def average_clip(self, cls_score):
         """Averaging class score over multiple clips.

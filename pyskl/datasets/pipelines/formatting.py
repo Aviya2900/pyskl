@@ -52,7 +52,44 @@ class ToTensor:
 
     def __repr__(self):
         return f'{self.__class__.__name__}(keys={self.keys})'
+    
+@PIPELINES.register_module()
+class SampleTensor:
+    """Lists given args together 
 
+    Returns:
+        _type_: Tensor
+    """
+    def __init__(self, list):
+        self.list = list
+        
+    def __call__(self, results):
+        data, dict = {}, {}
+        for item in self.list:
+            dict[item] = results[item]
+            del results[item]        
+        data['sample'], data['label']  = dict, results['label']
+        results = data
+        
+        return results
+    
+@PIPELINES.register_module()
+class LabelMapper:
+    """Maps labels for 2P configs
+
+    Returns:
+        _type_: torch.Tensor
+    """
+    def __init__(self):
+        self.label_map = {50: 0, 51: 1, 52: 2, 53: 3, 54: 4, 55: 5, 56: 6, 57: 7, 58: 8, 59: 9, 60: 10,
+                     106: 11, 107: 12, 108: 13, 109: 14, 110: 15, 111: 16, 112: 17, 113: 18, 114: 19,
+                     115: 20, 116: 21, 117: 22, 118: 23, 119: 24, 120: 25}
+
+    def __call__(self, results):
+        label = results['label']
+        results['label'] = torch.tensor(self.label_map.get((label+1), -1))
+        
+        return results
 
 @PIPELINES.register_module()
 class Rename:
