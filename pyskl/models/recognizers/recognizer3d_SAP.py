@@ -10,10 +10,13 @@ from .base import BaseRecognizer
 class Recognizer3D_SAP(BaseRecognizer):
     """3D recognizer model framework."""
 
-    def forward_train(self, imgs, keypoints, label, **kwargs):
+    def forward_train(self, sample, label, **kwargs):
         """Defines the computation performed at every call when training."""
 
         assert self.with_cls_head
+        imgs = sample[0]
+        keypoints = sample[1]
+        
         imgs = imgs.reshape((-1, ) + imgs.shape[2:])
         losses = dict()
 
