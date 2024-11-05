@@ -68,7 +68,7 @@ class SampleTensor:
         for item in self.list:
             dict[item] = results[item]
             del results[item]        
-        data['sample'], data['label']  = dict, results['label']
+        data['imgs'], data['label']  = dict, results['label']
         results = data
         
         return results
