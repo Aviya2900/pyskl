@@ -22,21 +22,20 @@ class Recognizer3D_SAP(BaseRecognizer):
         x = self.backbone(imgs, keypoints)
         return x
     
-    def forward(self, imgs, keypoints, label=None, return_loss=True, **kwargs):
+    def forward(self, imgs, label=None, return_loss=True, **kwargs):
         """Define the computation performed at every call."""
         if return_loss:
             if label is None:
                 raise ValueError('Label should not be None.')
-            return self.forward_train(imgs, keypoints, label, **kwargs)
+            return self.forward_train(imgs['imgs'].float(), imgs['keypoint'].float(), label, **kwargs)
 
-        return self.forward_test(imgs, keypoints, **kwargs)
+        return self.forward_test(imgs['imgs'].float(), imgs['keypoint'].float(), **kwargs)
 
     def forward_train(self, imgs, keypoints, label, **kwargs):
         """Defines the computation performed at every call when training."""
 
         assert self.with_cls_head
         
-        print(imgs.shape, keypoints.shape, label.shape)
         imgs = imgs.reshape((-1, ) + imgs.shape[2:])
         losses = dict()
 
