@@ -23,6 +23,7 @@ dataset_type = 'PoseDataset'
 ann_file = 'data/nturgbd/ntu120_hrnet.pkl'
 left_kp = [1, 3, 5, 7, 9, 11, 13, 15]
 right_kp = [2, 4, 6, 8, 10, 12, 14, 16]
+class_prob = [1] * 60 + [2] * 60
 train_pipeline = [
     dict(type='UniformSampleFrames', clip_len=48),
     dict(type='PoseDecode'),
@@ -73,7 +74,8 @@ data = dict(
             type=dataset_type,
             ann_file=ann_file,
             split='xsub_train_2p',
-            pipeline=train_pipeline)),
+            pipeline=train_pipeline,
+            class_prob=class_prob)),
     val=dict(type=dataset_type, ann_file=ann_file, split='xsub_val_2p', pipeline=val_pipeline),
     test=dict(type=dataset_type, ann_file=ann_file, split='xsub_val_2p', pipeline=test_pipeline))
 # optimizer
@@ -86,4 +88,4 @@ checkpoint_config = dict(interval=1)
 evaluation = dict(interval=1, metrics=['top_k_accuracy', 'mean_class_accuracy'], topk=(1, 5))
 log_config = dict(interval=20, hooks=[dict(type='TextLoggerHook'), dict(type='TensorboardLoggerHook')])
 log_level = 'INFO'
-work_dir = './work_dirs/posec3d/slowonly_r50_ntu120_xsub/joint'
+work_dir = './work_dirs/posec3d/slowonly_r50_ntu120_xsub/joint_2P_SAP'

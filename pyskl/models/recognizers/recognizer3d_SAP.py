@@ -38,7 +38,6 @@ class Recognizer3D_SAP(BaseRecognizer):
         
         imgs = imgs.reshape((-1, ) + imgs.shape[2:])
         losses = dict()
-
         x = self.extract_feat(imgs, keypoints)
 
         cls_score = self.cls_head(x)
