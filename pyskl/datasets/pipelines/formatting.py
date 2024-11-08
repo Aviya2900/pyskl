@@ -55,7 +55,7 @@ class ToTensor:
     
 @PIPELINES.register_module()
 class SampleTensor:
-    """Lists given args together 
+    """Groups given keys to a single dict 
 
     Returns:
         _type_: Tensor
@@ -87,7 +87,8 @@ class LabelMapper:
 
     def __call__(self, results):
         label = results['label']
-        results['label'] = torch.tensor(self.label_map.get((label+1), -1))
+        if type(label) == torch.Tensor: results['label'] = torch.tensor(self.label_map.get((label.item()+1), -1))
+        else: results['label'] = self.label_map.get((label+1), -1)
         
         return results
 

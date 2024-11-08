@@ -19,7 +19,7 @@ model = dict(
         dropout=0.5),
     test_cfg=dict(average_clips='prob'))
 
-dataset_type = 'PoseDataset'
+dataset_type = 'PoseDataset_2P'
 ann_file = 'data/nturgbd/ntu120_hrnet.pkl'
 left_kp = [1, 3, 5, 7, 9, 11, 13, 15]
 right_kp = [2, 4, 6, 8, 10, 12, 14, 16]
@@ -37,7 +37,6 @@ train_pipeline = [
     dict(type='Collect', keys=['imgs', 'keypoint', 'label'], meta_keys=[]),
     dict(type='ToTensor', keys=['imgs', 'keypoint', 'label']),
     dict(type='SampleTensor', list=['imgs', 'keypoint']),
-    dict(type='LabelMapper')
 ]
 val_pipeline = [
     dict(type='UniformSampleFrames', clip_len=48, num_clips=1),
@@ -49,7 +48,6 @@ val_pipeline = [
     dict(type='Collect', keys=['imgs', 'keypoint', 'label'], meta_keys=[]),
     dict(type='ToTensor', keys=['imgs', 'keypoint']),
     dict(type='SampleTensor', list=['imgs', 'keypoint']),
-    dict(type='LabelMapper')
 ]
 test_pipeline = [
     dict(type='UniformSampleFrames', clip_len=48, num_clips=10),
@@ -61,7 +59,6 @@ test_pipeline = [
     dict(type='Collect', keys=['imgs', 'keypoint', 'label'], meta_keys=[]),
     dict(type='ToTensor', keys=['imgs', 'keypoint']),
     dict(type='SampleTensor', list=['imgs', 'keypoint']),
-    dict(type='LabelMapper')
 ]
 data = dict(
     videos_per_gpu=32,
