@@ -16,7 +16,7 @@ model = dict(
         type='I3DHead',
         in_channels=512,
         num_classes=26,
-        dropout=0.5),
+        dropout=0.1),
     test_cfg=dict(average_clips='prob'))
 
 dataset_type = 'PoseDataset_2P'
