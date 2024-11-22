@@ -16,7 +16,7 @@ model = dict(
         type='I3DHead',
         in_channels=512,
         num_classes=26,
-        dropout=0.1),
+        dropout=0.5),
     test_cfg=dict(average_clips='prob'))
 
 dataset_type = 'PoseDataset_2P'
@@ -29,7 +29,7 @@ train_pipeline = [
     dict(type='PoseDecode'),
     dict(type='PoseCompact', hw_ratio=1., allow_imgpad=True),
     dict(type='Resize', scale=(-1, 64)),
-    dict(type='RandomResizedCrop', area_range=(0.56, 1.0)),
+    #dict(type='RandomResizedCrop', area_range=(0.56, 1.0)),
     dict(type='Resize', scale=(56, 56), keep_ratio=False),
     dict(type='Flip', flip_ratio=0.5, left_kp=left_kp, right_kp=right_kp),
     dict(type='GeneratePoseTarget', with_kp=False, with_limb=True),
