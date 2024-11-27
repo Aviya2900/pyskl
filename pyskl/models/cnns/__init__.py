@@ -4,8 +4,7 @@ from .potion import PoTion
 from .resnet import ResNet
 from .resnet3d import ResNet3d
 from .resnet3d_slowfast import ResNet3dSlowFast
-from .resnet3d_slowonly import ResNet3dSlowOnly
-from .resnet3d_slowonly_SAP import ResNet3dSlowOnly_SAP
+from .resnet3d_slowonly import ResNet3dSlowOnly, ResNet3dSlowOnly_SAP
 from .rgbposeconv3d import RGBPoseConv3D
 from .x3d import X3D
 
