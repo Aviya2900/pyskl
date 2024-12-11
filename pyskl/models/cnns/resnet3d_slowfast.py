@@ -9,6 +9,7 @@ from mmcv.utils import print_log
 from ...utils import cache_checkpoint, get_root_logger
 from ..builder import BACKBONES
 from .resnet3d import ResNet3d
+from .SAP_ import SAP
 
 
 class DeConvModule(nn.Module):
@@ -398,3 +399,43 @@ class ResNet3dSlowFast(nn.Module):
         out = (x_slow, x_fast)
 
         return out
+
+@BACKBONES.register_module()
+class ResNet3dSlowOnly_SAP(ResNet3d):
+
+    def __init__(self, **kwargs):
+        super().__init__()
+            
+        self.conv3d_1 = nn.Sequential(nn.Conv3d(in_channels=1, out_channels=8, kernel_size=(3, 3, 3), stride=(1, 1, 1), padding=(1, 1, 1)),
+                                    nn.BatchNorm3d(8),
+                                    nn.ReLU())
+        self.conv3d_2 = nn.Sequential(nn.Conv3d(in_channels=8, out_channels=17, kernel_size=(3, 3, 3), stride=(1, 1, 1), padding=(1, 1, 1)),
+                                            nn.BatchNorm3d(17),
+                                            nn.ReLU())
+        self.upsample = nn.Upsample(size=(48, 56, 56), mode='trilinear', align_corners=True)
+        
+        self.resnet3d = ResNet3dSlowFast(**kwargs)
+        self.gen_angle = SAP()
+        
+    def forward(self, imgs, keypoints):
+        N, M, T, V, _ = keypoints.shape
+        keys = torch.cat((keypoints, torch.ones(N, M, T, V, 1).to(keypoints.device)), dim=4)
+        keys = keys.permute(0,2,1,3,4).contiguous().view(N,T,-1) # N,T,M*V*C
+        keys = self.gen_angle(keys) # 
+        w_hmaps = self.correlation(imgs, keys) + imgs
+                
+        return self.resnet3d(w_hmaps)
+        
+    def correlation(self, x, y):
+        N, V, T, _, _ = x.shape # N,V,T,H,W
+        _, C, _, _, M = y.shape
+        y = y.permute(0,2,4,3,1).contiguous().view(N,T,M*V,C) # N,T,M*V,C
+
+        w = torch.matmul(y, y.permute(0,1,3,2).contiguous()).unsqueeze(1) # N,1,T,(M*V),(M*V)
+        w = self.conv3d_1(w) # N,8,T,(M*V),(M*V)
+        w = self.conv3d_2(w) # N,17,T,(M*V),(M*V)
+        w = self.upsample(w) # N,V,T,H,W
+
+        w_hmaps = (x*w) # N,V,T,H,W
+
+        return w_hmaps
