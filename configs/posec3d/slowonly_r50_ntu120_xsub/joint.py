@@ -15,7 +15,7 @@ model = dict(
     cls_head=dict(
         type='I3DHead',
         in_channels=512,
-        num_classes=120,
+        num_classes=26,
         dropout=0.5),
     test_cfg=dict(average_clips='prob'))
 
@@ -67,11 +67,11 @@ data = dict(
         dataset=dict(
             type=dataset_type,
             ann_file=ann_file,
-            split='xsub_train',
+            split='xsub_train_2p',
             pipeline=train_pipeline,
             class_prob=class_prob)),
-    val=dict(type=dataset_type, ann_file=ann_file, split='xsub_val', pipeline=val_pipeline),
-    test=dict(type=dataset_type, ann_file=ann_file, split='xsub_val', pipeline=test_pipeline))
+    val=dict(type=dataset_type, ann_file=ann_file, split='xsub_val_2p', pipeline=val_pipeline),
+    test=dict(type=dataset_type, ann_file=ann_file, split='xsub_val_2p', pipeline=test_pipeline))
 # optimizer
 optimizer = dict(type='SGD', lr=0.4, momentum=0.9, weight_decay=0.0003)  # this lr is used for 8 gpus
 optimizer_config = dict(grad_clip=dict(max_norm=40, norm_type=2))
