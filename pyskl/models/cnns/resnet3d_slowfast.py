@@ -400,7 +400,7 @@ class ResNet3dSlowFast(nn.Module):
 
         return out
 
-@BACKBONES.register_module()
+#@BACKBONES.register_module()
 class ResNet3dSlowOnly_SAP(ResNet3d):
 
     def __init__(self, **kwargs):
