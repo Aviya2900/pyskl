@@ -70,11 +70,11 @@ data = dict(
         dataset=dict(
             type=dataset_type,
             ann_file=ann_file,
-            split='xview_train_2p',
+            split='xset_train_2p',
             pipeline=train_pipeline,
             class_prob=class_prob)),
-    val=dict(type=dataset_type, ann_file=ann_file, split='xview_val_2p', pipeline=val_pipeline),
-    test=dict(type=dataset_type, ann_file=ann_file, split='xview_val_2p', pipeline=test_pipeline))
+    val=dict(type=dataset_type, ann_file=ann_file, split='xset_val_2p', pipeline=val_pipeline),
+    test=dict(type=dataset_type, ann_file=ann_file, split='xset_val_2p', pipeline=test_pipeline))
 # optimizer
 optimizer = dict(type='SGD', lr=0.05, momentum=0.9, weight_decay=0.0003)  # this lr is used for 8 gpus
 optimizer_config = dict(grad_clip=dict(max_norm=40, norm_type=2))
