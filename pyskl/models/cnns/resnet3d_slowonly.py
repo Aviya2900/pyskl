@@ -50,6 +50,39 @@ class ResNet3dSlowOnly_SAP(ResNet3d):
         w = self.upsample(w) # N,V,T,H,W
 
         return w
+    
+@BACKBONES.register_module()
+class ResNet3dSlowOnly_SAP_test1(ResNet3d):
+
+    def __init__(self, **kwargs):
+        super().__init__()
+        
+        self.conv1 = nn.Sequential(nn.Conv2d(in_channels=2, out_channels=32, kernel_size=1, stride=1, padding=0), nn.ReLU())
+        self.conv2 = nn.Sequential(nn.Conv2d(in_channels=32, out_channels=56, kernel_size=3, stride=1, padding=1), nn.ReLU())
+        self.conv3 = nn.Sequential(nn.Conv2d(in_channels=56, out_channels=56, kernel_size=3, stride=1, padding=1), nn.ReLU())
+        
+        self.resnet3d = ResNet3dSlowOnly(**kwargs)
+        self.gen_angle = SAP(soft_scale=20, num_heads=5)
+        self.non_local = NonLocalBlock(in_channels=5, inter_channels=8)
+        
+    def forward(self, imgs, keypoints):
+        N,M,T,V,C = keypoints.shape
+        keys = torch.cat((keypoints, torch.ones(N, M, T, V, 1).to(keypoints.device)), dim=4) # N,M,T,V,C
+        keys, _ = self.gen_angle(keys) # N,M,T,V,C'
+        w_hmaps = imgs*self.correlation(imgs, keys) + imgs
+                
+        return self.resnet3d(w_hmaps)
+        
+    def correlation(self, x, y):
+        N,M,T,V,C = y.shape # N,M,T,V,C'
+        
+        y = y.permute(0,2,1,3,4).contiguous() # N,T,M,V,C'
+        y = (self.non_local(y)[1] + y).permute(0,3,1,2,4).contiguous() # N,V,T,M,C'
+        w = self.conv1(y) # N,V,T,V,C'
+        w = self.conv2(y) # N,V,T,V,C'
+        w = self.conv3(y) # N,V,T,V,C'
+
+        return w
 
 if __name__ == "__main__":
     model = ResNet3dSlowOnly_SAP(in_channels=17,

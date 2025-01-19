@@ -59,18 +59,16 @@ def confusion_matrix(y_pred, y_real, normalize=None):
     if not isinstance(y_pred, np.ndarray):
         raise TypeError(
             f'y_pred must be list or np.ndarray, but got {type(y_pred)}')
-    if not y_pred.dtype == np.int64:
-        raise TypeError(
-            f'y_pred dtype must be np.int64, but got {y_pred.dtype}')
+    if y_pred.dtype != np.int64:
+        y_pred = y_pred.astype(np.int64)  # Convert to int64
 
     if isinstance(y_real, list):
         y_real = np.array(y_real)
     if not isinstance(y_real, np.ndarray):
         raise TypeError(
             f'y_real must be list or np.ndarray, but got {type(y_real)}')
-    if not y_real.dtype == np.int64:
-        raise TypeError(
-            f'y_real dtype must be np.int64, but got {y_real.dtype}')
+    if y_real.dtype != np.int64:
+        y_real = y_real.astype(np.int64)  # Convert to int64
 
     label_set = np.unique(np.concatenate((y_pred, y_real)))
     num_labels = len(label_set)
@@ -212,3 +210,20 @@ def binary_precision_recall_curve(y_score, y_true):
     sl = slice(last_ind, None, -1)
 
     return np.r_[precision[sl], 1], np.r_[recall[sl], 0], thresholds[sl]
+
+if __name__ == "__main__":
+    y_pred = [1, 0, 2, 1, 2]
+    y_real = [0, 0, 2, 1, 1]
+
+    print("Confusion Matrix (no normalization):")
+    print(confusion_matrix(y_pred, y_real, normalize=None))
+
+    print("\nConfusion Matrix (normalized by true):")
+    print(confusion_matrix(y_pred, y_real, normalize='true'))
+
+    print("\nConfusion Matrix (normalized by pred):")
+    print(confusion_matrix(y_pred, y_real, normalize='pred'))
+
+    print("\nConfusion Matrix (normalized by all):")
+    print(confusion_matrix(y_pred, y_real, normalize='all'))
+

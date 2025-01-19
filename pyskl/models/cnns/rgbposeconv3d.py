@@ -1,5 +1,6 @@
 import torch
 import torch.nn as nn
+import torch.nn.functional as F
 from mmcv.cnn import constant_init, kaiming_init
 from mmcv.runner import load_checkpoint
 from mmcv.utils import _BatchNorm, print_log
@@ -7,7 +8,7 @@ from mmcv.utils import _BatchNorm, print_log
 from ...utils import get_root_logger
 from ..builder import BACKBONES
 from .resnet3d_slowfast import ResNet3dPathway
-
+from .SAP import SAP, NonLocalBlock
 
 @BACKBONES.register_module()
 class RGBPoseConv3D(nn.Module):
@@ -168,6 +169,220 @@ class RGBPoseConv3D(nn.Module):
         x_pose = self.pose_path.layer3(x_pose)
 
         return (x_rgb, x_pose)
+
+    def train(self, mode=True):
+        """Set the optimization status when training."""
+        super().train(mode)
+        self.training = True
+
+    def eval(self):
+        super().eval()
+        self.training = False
+        
+@BACKBONES.register_module()
+class MMPoseConv3D_SAP(nn.Module):
+    """Slowfast backbone.
+
+    Args:
+        pretrained (str): The file path to a pretrained model.
+        speed_ratio (int): Speed ratio indicating the ratio between time
+            dimension of the fast and slow pathway, corresponding to the
+            :math:`\\alpha` in the paper. Default: 4.
+        channel_ratio (int): Reduce the channel number of fast pathway
+            by ``channel_ratio``, corresponding to :math:`\\beta` in the paper.
+            Default: 4.
+    """
+    def __init__(self,
+                 pretrained=None,
+                 speed_ratio=4,
+                 channel_ratio=4,
+                 feats_detach=False,
+                 pose_detach=False,
+                 feats_drop_path=0,
+                 pose_drop_path=0,
+                 sampling=False,
+                 feats_pathway=dict(
+                    num_stages=3,
+                    stage_blocks=(4, 6, 3),
+                    lateral=True,
+                    lateral_inv=True,
+                    lateral_infl=16,
+                    lateral_activate=(0, 1, 1),
+                    in_channels=17,
+                    base_channels=32,
+                    out_indices=(2, ),
+                    conv1_kernel=(1, 7, 7),
+                    conv1_stride=(1, 1),
+                    pool1_stride=(1, 1),
+                    inflate=(0, 1, 1),
+                    spatial_strides=(2, 2, 2),
+                    temporal_strides=(1, 1, 1)),
+                 pose_pathway=dict(
+                    num_stages=3,
+                    stage_blocks=(4, 6, 3),
+                    lateral=True,
+                    lateral_inv=True,
+                    lateral_infl=16,
+                    lateral_activate=(0, 1, 1),
+                    in_channels=17,
+                    base_channels=32,
+                    out_indices=(2, ),
+                    conv1_kernel=(1, 7, 7),
+                    conv1_stride=(1, 1),
+                    pool1_stride=(1, 1),
+                    inflate=(0, 1, 1),
+                    spatial_strides=(2, 2, 2),
+                    temporal_strides=(1, 1, 1))):
+
+        super().__init__()
+        self.sampling = sampling
+        self.pretrained = pretrained
+        self.speed_ratio = speed_ratio
+        self.channel_ratio = channel_ratio
+
+        if feats_pathway['lateral']:
+            feats_pathway['speed_ratio'] = speed_ratio
+            feats_pathway['channel_ratio'] = channel_ratio
+
+        if pose_pathway['lateral']:
+            pose_pathway['speed_ratio'] = speed_ratio
+            pose_pathway['channel_ratio'] = channel_ratio
+
+        self.gen_angle = SAP(soft_scale=20, num_heads=5)
+        self.non_local = NonLocalBlock(in_channels=5, inter_channels=8)
+        self.feats_path = ResNet3dPathway(**feats_pathway)
+        self.pose_path = ResNet3dPathway(**pose_pathway)
+        self.feats_detach = feats_detach
+        self.pose_detach = pose_detach
+        assert 0 <= feats_drop_path <= 1
+        assert 0 <= pose_drop_path <= 1
+        self.feats_drop_path = feats_drop_path
+        self.pose_drop_path = pose_drop_path
+
+    def init_weights(self):
+        """Initiate the parameters either from existing checkpoint or from
+        scratch."""
+        for m in self.modules():
+            if isinstance(m, nn.Conv3d):
+                kaiming_init(m)
+            elif isinstance(m, _BatchNorm):
+                constant_init(m, 1)
+
+        if isinstance(self.pretrained, str):
+            logger = get_root_logger()
+            msg = f'load model from: {self.pretrained}'
+            print_log(msg, logger=logger)
+            load_checkpoint(self, self.pretrained, strict=True, logger=logger)
+        elif self.pretrained is None:
+            # Init two branch seperately.
+            self.feats_path.init_weights()
+            self.pose_path.init_weights()
+        else:
+            raise TypeError('pretrained must be a str or None')
+
+    def forward(self, imgs, heatmap_imgs):
+        """Defines the computation performed at every call.
+
+        Args:
+            imgs (torch.Tensor): The input data.
+            heatmap_imgs (torch.Tensor): The input data.
+
+        Returns:
+            tuple[torch.Tensor]: The feature of the input
+            samples extracted by the backbone.
+        """
+        
+        #========================SAPLyr==============================#
+        N,M,T,V,C = imgs.shape
+        imgs = torch.cat((imgs, torch.ones(N, M, T, V, 1).to(imgs.device)), dim=4) # N,M,T,V,C
+        imgs, _ = self.gen_angle(imgs) # N,M,T,V,C'
+        
+        if self.training:
+            feats_drop_path = torch.rand(1) < self.feats_drop_path
+            pose_drop_path = torch.rand(1) < self.pose_drop_path
+        else:
+            feats_drop_path, pose_drop_path = False, False       
+        
+        #=========================StemLyr=============================#
+        x_feats = self.feats_path.conv1(imgs)
+        x_feats = self.feats_path.maxpool(x_feats)
+        
+        x_pose = self.pose_path.conv1(heatmap_imgs)
+        x_pose = self.pose_path.maxpool(x_pose)
+
+        #=========================Lyr1=============================#
+        if hasattr(self.feats_path, 'layer1_lateral'):
+            feat = x_pose.detach() if self.feats_detach else x_pose
+            N,C,T,H,W = feat.shape
+            if self.sampling: feat = F.interpolate(feat.view(-1,H,W).unsqueeze(1), size=(5,5), mode='bicubic',
+                                                   align_corners=False).squeeze(1).view(N,C,T,5,5)
+            x_pose_lateral = self.feats_path.layer1_lateral(feat)
+            if feats_drop_path: x_pose_lateral = x_pose_lateral.new_zeros(x_pose_lateral.shape)
+        if hasattr(self.pose_path, 'layer1_lateral'):
+            feat = x_feats.detach() if self.pose_detach else x_feats
+            N,C,T,H,W = feat.shape
+            if self.sampling: feat = F.interpolate(feat.view(-1,H,W).unsqueeze(1), size=(56,56), mode='bicubic',
+                                                   align_corners=False).squeeze(1).view(N,C,T,56,56)
+            x_feats_lateral = self.pose_path.layer1_lateral(feat)
+            if pose_drop_path: x_feats_lateral = x_feats_lateral.new_zeros(x_feats_lateral.shape)
+
+        if hasattr(self.feats_path, 'layer1_lateral'):
+            x_feats = torch.cat((x_feats, x_pose_lateral), dim=1)
+        if hasattr(self.pose_path, 'layer1_lateral'):
+            x_pose = torch.cat((x_pose, x_feats_lateral), dim=1)
+
+        x_feats = self.feats_path.layer1(x_feats)
+        x_pose = self.pose_path.layer1(x_pose)
+        
+        #=========================Lyr2=============================#
+        if hasattr(self.feats_path, 'layer2_lateral'):
+            feat = x_pose.detach() if self.feats_detach else x_pose
+            N,C,T,H,W = feat.shape
+            if self.sampling: feat = F.interpolate(feat.view(-1,H,W).unsqueeze(1), size=(3,3), mode='bicubic',
+                                                   align_corners=False).squeeze(1).view(N,C,T,3,3)
+            x_pose_lateral = self.feats_path.layer2_lateral(feat)
+            if feats_drop_path: x_pose_lateral = x_pose_lateral.new_zeros(x_pose_lateral.shape)
+        if hasattr(self.pose_path, 'layer2_lateral'):
+            feat = x_feats.detach() if self.pose_detach else x_feats
+            N,C,T,H,W = feat.shape
+            if self.sampling: feat = F.interpolate(feat.view(-1,H,W).unsqueeze(1), size=(28,28), mode='bicubic',
+                                                   align_corners=False).squeeze(1).view(N,C,T,28,28)
+            x_feats_lateral = self.pose_path.layer2_lateral(feat)
+            if pose_drop_path: x_feats_lateral = x_feats_lateral.new_zeros(x_feats_lateral.shape)
+
+        if hasattr(self.feats_path, 'layer2_lateral'):
+            x_feats = torch.cat((x_feats, x_pose_lateral), dim=1)
+        if hasattr(self.pose_path, 'layer2_lateral'):
+            x_pose = torch.cat((x_pose, x_feats_lateral), dim=1)
+
+        x_feats = self.feats_path.layer2(x_feats)
+        x_pose = self.pose_path.layer2(x_pose)
+        
+        #=========================Lyr3=============================#
+        if hasattr(self.feats_path, 'layer3_lateral'):
+            feat = x_pose.detach() if self.feats_detach else x_pose
+            N,C,T,H,W = feat.shape
+            if self.sampling: feat = F.interpolate(feat.view(-1,H,W).unsqueeze(1), size=(2,2), mode='bicubic',
+                                                   align_corners=False).squeeze(1).view(N,C,T,2,2)
+            x_pose_lateral = self.feats_path.layer3_lateral(feat)
+            if feats_drop_path: x_pose_lateral = x_pose_lateral.new_zeros(x_pose_lateral.shape)
+        if hasattr(self.pose_path, 'layer3_lateral'):
+            feat = x_feats.detach() if self.pose_detach else x_feats
+            N,C,T,H,W = feat.shape
+            if self.sampling: feat = F.interpolate(feat.view(-1,H,W).unsqueeze(1), size=(14,14), mode='bicubic',
+                                                   align_corners=False).squeeze(1).view(N,C,T,14,14)
+            x_feats_lateral = self.pose_path.layer3_lateral(feat)
+            if pose_drop_path: x_feats_lateral = x_feats_lateral.new_zeros(x_feats_lateral.shape)
+
+        if hasattr(self.feats_path, 'layer3_lateral'):
+            x_feats = torch.cat((x_feats, x_pose_lateral), dim=1)
+        if hasattr(self.pose_path, 'layer3_lateral'):
+            x_pose = torch.cat((x_pose, x_feats_lateral), dim=1)
+
+        x_feats = self.feats_path.layer3(x_feats)
+        x_pose = self.pose_path.layer3(x_pose)
+
+        return (x_feats, x_pose)
 
     def train(self, mode=True):
         """Set the optimization status when training."""
